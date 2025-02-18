@@ -1,0 +1,44 @@
+sources:
+  kafka:
+    type: kafka
+    group_id: "vector"
+    auto_offset_reset: "smallest"
+    bootstrap_servers: 1.52.246.190:9092
+    topics: [ "github" ]
+    decoding:
+      codec: "json"
+
+sinks:
+  clickhouse:
+    inputs:
+      - "kafka"
+    type: "clickhouse"
+    endpoint: "http://1.52.246.190:8123"
+    database: "gitdb"
+    table: "github"
+    skip_unknown_fields: true
+    auth:
+      strategy: "basic"
+      user: "kafka"
+      password: "kafka"
+    buffer:
+      max_events: 10000
+    batch:
+      timeout_secs: 1
+
+  elasticsearch_sink:
+    inputs:
+      - "kafka"
+    type: "elasticsearch"
+    endpoints:
+      - "http://elasticsearch:9200"
+    bulk:
+      index: "vector-kafka-logs"
+    mode: bulk
+    batch:
+      max_bytes: 10485760  # 10MB
+      max_events: 1000
+    auth:
+      strategy: "basic"
+      user: "elastic"
+      password: "Elk@2025"

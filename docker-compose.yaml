@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    restart: always
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://1.52.246.190:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    entrypoint: >
+      bash -c "(/etc/confluent/docker/run & sleep 1 && kafka-topics --bootstrap-server 1.52.246.190:9092 --create --if-not-exists --topic github --partitions 3 --replication-factor 1 && wait)"
+    depends_on:
+      - zookeeper
+
+  ##DB
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse_db
+    restart: unless-stopped
+    user: "101:101"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native TCP interface
+    volumes:
+      - ${PWD}/data/users.xml:/etc/clickhouse-server/users.xml
+      - ${PWD}/config/config.xml:/etc/clickhouse-server/config.d/config.xml
+      # - ./users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ${PWD}/dump.sql:/docker-entrypoint-initdb.d/dump.sql
+      - ${PWD}/logs/:/var/log/clickhouse-server/
+      - ${PWD}/access/:/var/lib/clickhouse/access/
+
+    # command: bash -c "clickhouse server --config-file /etc/clickhouse-server/config.d/config.xml & sleep 5 && clickhouse-client --host=localhost --multiquery < /docker-entrypoint-initdb.d/dump.sql"
+
+    environment:
+      CLICKHOUSE_USER: kafka
+      CLICKHOUSE_PASSWORD: kafka
+      CLICKHOUSE_DB: gitdb
+
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+    #   interval: 10s
+    #   retries: 5
+    #   timeout: 5s
+
+  #Elastic
+  elasticsearch:
+    image: elasticsearch:7.8.1
+    ports:
+      - 9200:9200
+    environment:
+      discovery.type: 'single-node'
+      xpack.security.enabled: 'true'
+      ELASTIC_PASSWORD: 'Elk@2025'
+      ES_JAVA_OPTS: '-Xmx2g -Xms2g'
+    # volumes:
+    #   - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:Elk@2025 http://elasticsearch:9200/_cluster/health | grep -q '\"status\":\"green\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kibana:
+    image: kibana:7.8.1
+    volumes:
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml
+    ports:
+      - 5601:5601
+
+  vector:
+    build:
+      context: .  
+      dockerfile: Dockerfile_vector
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml  
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      # clickhouse:
+      #   condition: service_healthy
+    # ports:
+    #   - 8888:80
+
+
+# volumes:
+#   ch_data:
+#   elasticsearch-data:
