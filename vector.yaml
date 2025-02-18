@@ -3,7 +3,7 @@ sources:
     type: kafka
     group_id: "vector"
     auto_offset_reset: "smallest"
-    bootstrap_servers: 1.52.246.190:9092
+    bootstrap_servers: <kafka-usr>:<kafka-pw>
     topics: [ "github" ]
     decoding:
       codec: "json"
@@ -13,7 +13,7 @@ sinks:
     inputs:
       - "kafka"
     type: "clickhouse"
-    endpoint: "http://1.52.246.190:8123"
+    endpoint: "<ch_http>"
     database: "gitdb"
     table: "github"
     skip_unknown_fields: true
